@@ -4,7 +4,7 @@ import com.atlassian.jira.issue.customfields.option.Option
 def customFieldManager = ComponentAccessor.getCustomFieldManager()
 def optionsManager = ComponentAccessor.getOptionsManager()
 
-def escalatedField = customFieldManager.getCustomFieldObject("customfield_12345")  // thay đúng ID
+def escalatedField = customFieldManager.getCustomFieldObject("customfield_12345") // thay ID chính xác
 
 if (!escalatedField) {
     return false
@@ -12,9 +12,20 @@ if (!escalatedField) {
 
 def fieldValue = issue.getCustomFieldValue(escalatedField) as Option
 
-// Kiểm tra label thực tế
-if (fieldValue == null) {
-    return false // không cho phép nếu chưa chọn gì
+log.warn("Escalated value: ${fieldValue?.getValue()}")
+
+
+// Nếu field rỗng hoặc giá trị không phải là option hợp lệ trong context hiện tại → chặn
+if (!fieldValue) {
+    return false
 }
 
+def config = escalatedField.getRelevantConfig(issue)
+def validOptions = optionsManager.getOptions(config)
+
+if (!validOptions.contains(fieldValue)) {
+    return false // Giá trị đã chọn không còn hợp lệ trong context hiện tại
+}
+
+// So sánh giá trị option
 return fieldValue.getValue() == "True"
