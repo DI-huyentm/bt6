@@ -29,3 +29,6 @@ if (!validOptions.contains(fieldValue)) {
 
 // So sánh giá trị option
 return fieldValue.getValue() == "True"
+
+
+Issue was previously Closed. Required field Escalated to be True to Reopen. Issue moved to In Progress. Please close again if needed.
