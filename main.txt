@@ -32,3 +32,5 @@ return fieldValue.getValue() == "True"
 
 
 Issue was previously Closed. Required field Escalated to be True to Reopen. Issue moved to In Progress. Please close again if needed.
+
+{{issue.description.split("\n").get(0)}} - Event ID: {{issue.description.match("Event ID: (.+)").split("Event ID: ").get(1)}}
