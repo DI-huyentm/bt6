@@ -1,36 +1,49 @@
 import com.atlassian.jira.component.ComponentAccessor
-import com.atlassian.jira.issue.customfields.option.Option
+import com.atlassian.jira.issue.Issue
+import com.atlassian.jira.user.ApplicationUser
+import com.atlassian.jira.event.issue.IssueEvent
+import com.atlassian.jira.issue.comments.Comment
 
-def customFieldManager = ComponentAccessor.getCustomFieldManager()
-def optionsManager = ComponentAccessor.getOptionsManager()
+// Accessors
+def commentManager = ComponentAccessor.commentManager
+def issue = event.issue as Issue
+def comment = event.comment as Comment
 
-def escalatedField = customFieldManager.getCustomFieldObject("customfield_12345") // thay ID chính xác
-
-if (!escalatedField) {
-    return false
+// Only for issue types Incident or Event
+if (!(issue.issueType.name in ["Incident", "Event"])) {
+    return
 }
 
-def fieldValue = issue.getCustomFieldValue(escalatedField) as Option
-
-log.warn("Escalated value: ${fieldValue?.getValue()}")
-
-
-// Nếu field rỗng hoặc giá trị không phải là option hợp lệ trong context hiện tại → chặn
-if (!fieldValue) {
-    return false
+// Exclude Automation users
+def automationUsernames = ["automation", "automation for jira"]
+if (automationUsernames.any { comment.authorApplicationUser?.username?.toLowerCase()?.contains(it) }) {
+    return
 }
 
-def config = escalatedField.getRelevantConfig(issue)
-def validOptions = optionsManager.getOptions(config)
-
-if (!validOptions.contains(fieldValue)) {
-    return false // Giá trị đã chọn không còn hợp lệ trong context hiện tại
+// Check if this is the first human comment
+def allComments = commentManager.getComments(issue)
+def humanComments = allComments.findAll {
+    !(automationUsernames.any { bot -> it.authorApplicationUser?.username?.toLowerCase()?.contains(bot) })
 }
 
-// So sánh giá trị option
-return fieldValue.getValue() == "True"
+if (humanComments.size() > 1) {
+    return // Not first human comment
+}
 
+// Assign issue to commenter
+issue.setAssignee(comment.authorApplicationUser)
+ComponentAccessor.issueManager.updateIssue(comment.authorApplicationUser, issue, EventDispatchOption.DO_NOT_DISPATCH, false)
 
-Issue was previously Closed. Required field Escalated to be True to Reopen. Issue moved to In Progress. Please close again if needed.
+// Transition issue to "In Progress"
+def workflowManager = ComponentAccessor.workflowManager
+def issueService = ComponentAccessor.issueService
+def transitionValidation = issueService.validateTransition(
+    comment.authorApplicationUser,
+    issue.id,
+    21, // Replace with your actual "In Progress" transition ID
+    issueService.newIssueInputParameters()
+)
 
-{{issue.description.split("\n").get(0)}} - Event ID: {{issue.description.match("Event ID: (.+)").get(0).split("Event ID: ").get(1)}}
+if (transitionValidation.isValid()) {
+    issueService.transition(comment.authorApplicationUser, transitionValidation)
+}
