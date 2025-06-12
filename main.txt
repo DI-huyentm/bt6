@@ -47,3 +47,56 @@ def transitionValidation = issueService.validateTransition(
 if (transitionValidation.isValid()) {
     issueService.transition(comment.authorApplicationUser, transitionValidation)
 }
+
+
+import com.atlassian.jira.component.ComponentAccessor
+import com.atlassian.jira.bc.issue.IssueService
+import com.atlassian.jira.event.type.EventDispatchOption
+
+// 🔁 These should be passed in via Automation
+def issueKey = binding.variables.get("issueKey") // from {{issue.key}}
+def username = binding.variables.get("username") // from {{comment.author.key}}
+
+def issueManager = ComponentAccessor.issueManager
+def userManager = ComponentAccessor.userManager
+def issueService = ComponentAccessor.issueService
+
+def user = userManager.getUserByKey(username)
+def issue = issueManager.getIssueByCurrentKey(issueKey)
+
+if (!user || !issue) {
+    return "❌ Invalid user or issue: user=${user}, issue=${issue}"
+}
+
+// Determine transition ID based on issue type
+def transitionId
+switch (issue.issueType.name) {
+    case "Event":
+        transitionId = 321
+        break
+    case "Incident":
+        transitionId = 11
+        break
+    default:
+        return "❌ No transition defined for issue type '${issue.issueType.name}'"
+}
+
+// Assign the issue to commenter
+issue.setAssignee(user)
+issueManager.updateIssue(user, issue, EventDispatchOption.DO_NOT_DISPATCH, false)
+
+// Perform transition
+def validation = issueService.validateTransition(
+    user,
+    issue.id,
+    transitionId,
+    issueService.newIssueInputParameters()
+)
+
+if (validation.isValid()) {
+    issueService.transition(user, validation)
+    return "✅ Assigned to ${user.username} and transitioned to In Progress (ID ${transitionId})"
+} else {
+    return "❌ Transition failed: ${validation.errorCollection}"
+}
+
